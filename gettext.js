@@ -18,6 +18,10 @@ const upload = multer().fields([
     { name: 'images', maxCount: 10 }
 ]);
 
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.urlencoded({ extended: true })); // เพื่อให้สามารถอ่านข้อมูลจากฟอร์มได้
+app.use(express.json()); // เพื่อให้สามารถรับข้อมูล JSON ได้
+
 const extractTextFromPDF = async (buffer) => {
     try {
         const data = await pdfParse(buffer);
@@ -156,6 +160,7 @@ app.post('/', upload, async (req, res) => {
 
     const doc = new Document({ sections: [{ properties: {}, children: children }] });
     const wordBuffer = await Packer.toBuffer(doc);
+    
     res.set({
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename=output.zip`,
@@ -179,8 +184,6 @@ app.post('/', upload, async (req, res) => {
         });
     });
 });
-
-app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
