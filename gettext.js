@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require('express'); 
 const multer = require('multer');
 const fetch = require('node-fetch');
 const cheerio = require('cheerio');
@@ -9,16 +9,18 @@ const fs = require('fs');
 const archiver = require('archiver');
 const { v4: uuidv4 } = require('uuid');
 const Tesseract = require('tesseract.js');
-const { PDFDocument } = require('pdf-lib'); // เพิ่ม pdf-lib เข้ามาใช้สำหรับดึงรูปภาพจาก PDF
+const { PDFDocument } = require('pdf-lib');
 
 const app = express();
 const { AlignmentType } = require("docx");
 
+// Multer setup for file uploads
 const upload = multer().fields([
     { name: 'pdf', maxCount: 1 },
     { name: 'images', maxCount: 10 }
 ]);
 
+// Extract text from PDF
 const extractTextFromPDF = async (buffer) => {
     try {
         const data = await pdfParse(buffer);
@@ -29,6 +31,7 @@ const extractTextFromPDF = async (buffer) => {
     }
 };
 
+// Extract text from images using Tesseract.js
 const extractTextFromImages = async (imageFiles) => {
     const extractedTexts = [];
     
@@ -44,10 +47,10 @@ const extractTextFromImages = async (imageFiles) => {
     return extractedTexts.join('\n');
 };
 
+// Extract images from PDF
 const extractImagesFromPDF = async (pdfBuffer) => {
     const pdfDoc = await PDFDocument.load(pdfBuffer);
     const imageFiles = [];
-
     const pages = pdfDoc.getPages();
 
     for (const page of pages) {
@@ -55,7 +58,7 @@ const extractImagesFromPDF = async (pdfBuffer) => {
         
         for (const image of images) {
             const imageBuffer = image.getBytes();
-            const imagePath = path.join(__dirname, `${uuidv4()}.png`);
+            const imagePath = path.join(__dirname, 'public', `${uuidv4()}.png`); // Save images in public folder
             fs.writeFileSync(imagePath, imageBuffer);
             imageFiles.push(imagePath);
         }
@@ -64,6 +67,7 @@ const extractImagesFromPDF = async (pdfBuffer) => {
     return imageFiles;
 };
 
+// Extract images from a URL
 const extractImagesFromURL = async (url) => {
     const imageUrls = [];
     try {
@@ -84,6 +88,7 @@ const extractImagesFromURL = async (url) => {
     return imageUrls;
 };
 
+// Route for file uploads and extraction
 app.post('/', upload, async (req, res) => {
     const url = req.body.url;
     const pdfFile = req.files['pdf'] ? req.files['pdf'][0] : null;
@@ -97,7 +102,7 @@ app.post('/', upload, async (req, res) => {
             for (const imageUrl of imageUrls) {
                 const response = await fetch(imageUrl);
                 const buffer = await response.buffer();
-                const imagePath = path.join(__dirname, `${uuidv4()}.png`);
+                const imagePath = path.join(__dirname, 'public', `${uuidv4()}.png`);
                 fs.writeFileSync(imagePath, buffer);
                 extractedImageFiles.push(imagePath);
             }
@@ -179,7 +184,6 @@ app.post('/', upload, async (req, res) => {
     archive.pipe(output);
     archive.append(wordBuffer, { name: 'document.docx' });
 
-
     extractedImageFiles.forEach(filePath => {
         archive.file(filePath, { name: path.basename(filePath) });
     });
@@ -187,12 +191,15 @@ app.post('/', upload, async (req, res) => {
     archive.finalize();
 });
 
+// Serving static files from public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Route for serving the index.html page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Server configuration
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
