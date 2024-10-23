@@ -9,11 +9,11 @@ const fs = require('fs');
 const archiver = require('archiver');
 const { v4: uuidv4 } = require('uuid');
 const Tesseract = require('tesseract.js');
-const { PDFDocument } = require('pdf-lib'); // เพิ่ม pdf-lib เข้ามาใช้สำหรับดึงรูปภาพจาก PDF
-
-const app = express();
+const { PDFDocument } = require('pdf-lib');
+const os = require('os'); // ใช้เพื่อเก็บไฟล์ชั่วคราว
 const { AlignmentType } = require("docx");
 
+const app = express();
 const upload = multer().fields([
     { name: 'pdf', maxCount: 1 },
     { name: 'images', maxCount: 10 }
@@ -47,15 +47,13 @@ const extractTextFromImages = async (imageFiles) => {
 const extractImagesFromPDF = async (pdfBuffer) => {
     const pdfDoc = await PDFDocument.load(pdfBuffer);
     const imageFiles = [];
-
     const pages = pdfDoc.getPages();
 
     for (const page of pages) {
         const images = page.node.Images || [];
-        
         for (const image of images) {
             const imageBuffer = image.getBytes();
-            const imagePath = path.join(__dirname, `${uuidv4()}.png`);
+            const imagePath = path.join(os.tmpdir(), `${uuidv4()}.png`); // ใช้ temp folder
             fs.writeFileSync(imagePath, imageBuffer);
             imageFiles.push(imagePath);
         }
@@ -97,7 +95,7 @@ app.post('/', upload, async (req, res) => {
             for (const imageUrl of imageUrls) {
                 const response = await fetch(imageUrl);
                 const buffer = await response.buffer();
-                const imagePath = path.join(__dirname, `${uuidv4()}.png`);
+                const imagePath = path.join(os.tmpdir(), `${uuidv4()}.png`);
                 fs.writeFileSync(imagePath, buffer);
                 extractedImageFiles.push(imagePath);
             }
@@ -114,86 +112,4 @@ app.post('/', upload, async (req, res) => {
                     children.push(new Paragraph({ children: [new TextRun({ text: headingText, bold: true })], heading: headingLevel }));
                 } else if (tagName === 'p') {
                     const paragraphText = $(elem).text();
-                    children.push(new Paragraph(paragraphText));
-                }
-            });
-
-        } catch (err) {
-            console.log('Error fetching website:', err);
-        }
-    }
-
-    if (pdfFile) {
-        try {
-            const pdfText = await extractTextFromPDF(pdfFile.buffer);
-            const extractedPDFImages = await extractImagesFromPDF(pdfFile.buffer);
-
-            if (pdfText) {
-                const pdfLines = pdfText.split('\n').map(line => new Paragraph(line));
-                children.push(new Paragraph({ text: 'Extracted Text from PDF', heading: HeadingLevel.HEADING_1 }));
-                children.push(...pdfLines);
-            }
-
-            extractedPDFImages.forEach(imagePath => {
-                extractedImageFiles.push(imagePath);
-            });
-            
-        } catch (err) {
-            console.error(`Error extracting text or images from PDF: ${err}`);
-        }
-    }
-    
-    if (imageFiles.length > 0) {
-        try {
-            children.push(new Paragraph({ text: 'Extracted Text from Images', heading: HeadingLevel.HEADING_1 }));
-            const imageTexts = await extractTextFromImages(imageFiles);
-            if (imageTexts) {
-                children.push(new Paragraph(imageTexts));
-            }
-        } catch (err) {
-            console.error(`Error extracting text from images: ${err}`);
-        }
-    }
-
-    const doc = new Document({ sections: [{ properties: {}, children: children }] });
-    const wordBuffer = await Packer.toBuffer(doc);
-    const zipFilePath = path.join(__dirname, 'output.zip');
-    const output = fs.createWriteStream(zipFilePath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
-
-    output.on('close', () => {
-        console.log(`ZIP file created: ${archive.pointer()} total bytes`);
-        res.set({
-            'Content-Type': 'application/zip',
-            'Content-Disposition': 'attachment; filename=output.zip',
-        });
-        res.sendFile(zipFilePath);
-
-        extractedImageFiles.forEach(filePath => fs.unlinkSync(filePath));
-    });
-
-    archive.on('error', (err) => {
-        throw err;
-    });
-
-    archive.pipe(output);
-    archive.append(wordBuffer, { name: 'document.docx' });
-
-
-    extractedImageFiles.forEach(filePath => {
-        archive.file(filePath, { name: path.basename(filePath) });
-    });
-
-    archive.finalize();
-});
-
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+                    children.push(new
